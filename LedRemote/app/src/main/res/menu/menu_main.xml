@@ -1,0 +1,19 @@
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:context="com.midnet.ledremote.MainActivity">
+
+    <!-- "Set Timer", should appear as action button if possible -->
+    <item
+        android:id="@+id/action_set_timer"
+        android:icon="@drawable/timer"
+        android:title="@string/set_timer"
+        app:showAsAction="ifRoom"/>
+
+    <!-- Settings, should always be in the overflow -->
+    <item
+        android:id="@+id/action_settings"
+        android:orderInCategory="100"
+        android:title="@string/action_settings"
+        app:showAsAction="never" />
+</menu>

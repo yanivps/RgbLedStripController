@@ -1,0 +1,26 @@
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--<SwitchPreference-->
+        <!--android:defaultValue="true"-->
+        <!--android:key="example_switch"-->
+        <!--android:summary="@string/pref_description_social_recommendations"-->
+        <!--android:title="@string/pref_title_social_recommendations" />-->
+
+    <EditTextPreference
+        android:inputType="textNoSuggestions"
+        android:key="ip_address"
+        android:maxLines="1"
+        android:selectAllOnFocus="true"
+        android:singleLine="true"
+        android:title="@string/pref_title_ip_address" />
+
+    <EditTextPreference
+        android:inputType="number"
+        android:key="port"
+        android:maxLines="1"
+        android:selectAllOnFocus="true"
+        android:singleLine="true"
+        android:defaultValue="4000"
+        android:title="@string/pref_title_port" />
+
+</PreferenceScreen>
