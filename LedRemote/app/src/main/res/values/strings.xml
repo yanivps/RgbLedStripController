@@ -15,8 +15,18 @@
     <string name="light_on">Light On</string>
     <string name="light_off">Light Off</string>
 
-    <!-- Strings related to Settings -->
     <string name="pref_title_ip_address">IP Address</string>
     <string name="pref_title_port">Port</string>
+
+    <string name="animation">Animation</string>
+    <string name="duration">Duration</string>
+    <string name="stop">Stop</string>
+
+    <string-array name="animation_array">
+        <item>Choose animation...</item>
+        <item>Fade</item>
+        <item>Blink</item>
+    </string-array>
+
 
 </resources>

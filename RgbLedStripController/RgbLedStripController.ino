@@ -6,6 +6,9 @@
 #define SET_COLOR_COMMAND 0x01
 #define TIMER_ON_COMMAND 0x02
 #define TIMER_OFF_COMMAND 0x03
+#define ANIMATION_COMMAND 0x04
+#define FADE_ANIMATION 0x01
+#define BLINK_ANIMATION 0x02
 
 byte bytesRecvd = 0;
 byte dataRecvCount = 0;
@@ -22,6 +25,16 @@ unsigned long timerOff = 0;
 unsigned long startTimerOn = 0;
 unsigned long timerOn = 0;
 
+// Animations definitions
+unsigned long animationStartTime = 0;
+unsigned long animationPeriod = 0;
+unsigned long timePerFadeStep = 0;
+byte animationType;
+boolean fadeIn;
+float redPinFadeValue, redFadeDiff;
+float greenPinFadeValue, greenFadeDiff;
+float bluePinFadeValue, blueFadeDiff;
+
 #define BUTTON_PRESSED LOW
 const int onOffButtonPin = 2;
 
@@ -35,9 +48,9 @@ const int max_red = 255;
 const int max_green = 255;
 const int max_blue = 100;
 
-byte currentRedPinValue = 255, lastRedPinValue = 0;
-byte currentGreenPinValue = 255, lastGreenPinValue = 0;
-byte currentBluePinValue = 255, lastBluePinValue = 0;
+byte currentRedPinValue = 255, lastRedPinValue = 0, redPinBeforeAnimation = 0;
+byte currentGreenPinValue = 255, lastGreenPinValue = 0, greenPinBeforeAnimation = 0;
+byte currentBluePinValue = 255, lastBluePinValue = 0, bluePinBeforeAnimation = 0;
 
 byte colors[3] = {0, 0, 0}; // array to store led brightness values
 byte timerOnColors[3] = {0, 0, 0}; // array to store led brightness values of future timer
@@ -62,31 +75,38 @@ void setup()
 
 void loop()
 {
+  currentTime = millis();
   getSerialData();
   processData();
   processTimers();
+  animate();
 }
 
 void buttonStateChanged() {
   if (digitalRead(onOffButtonPin) == BUTTON_PRESSED) {
-    delayMicroseconds(10000); // Cannot use delay in interrupt
+    delayMicroseconds(10000); // Delay for push button debounce. Cannot use delay in interrupt
     if (digitalRead(onOffButtonPin) == BUTTON_PRESSED) {
-      if (currentRedPinValue == 255 && currentGreenPinValue == 255  && currentBluePinValue == 255) { // if turned off, turn on
-        currentRedPinValue = lastRedPinValue;
-        currentGreenPinValue = lastGreenPinValue;
-        currentBluePinValue = lastBluePinValue;
-        lastRedPinValue = lastGreenPinValue = lastBluePinValue = 255;
-      } else { // if turned on, turn off.
-        lastRedPinValue = currentRedPinValue;
-        lastGreenPinValue = currentGreenPinValue;
-        lastBluePinValue = currentBluePinValue;
-        currentRedPinValue = currentGreenPinValue = currentBluePinValue = 255;
-      }
-      analogWrite(rgbRedPin, currentRedPinValue);
-      analogWrite(rgbGreenPin, currentGreenPinValue);
-      analogWrite(rgbBluePin, currentBluePinValue);
+      stopAnimation(false); // Stop the current animation
+      toggleLed();
     }
   }
+}
+
+void toggleLed() {
+  if (currentRedPinValue == 255 && currentGreenPinValue == 255  && currentBluePinValue == 255) { // if turned off, turn on
+    currentRedPinValue = lastRedPinValue;
+    currentGreenPinValue = lastGreenPinValue;
+    currentBluePinValue = lastBluePinValue;
+    lastRedPinValue = lastGreenPinValue = lastBluePinValue = 255;
+  } else { // if turned on, turn off.
+    lastRedPinValue = currentRedPinValue;
+    lastGreenPinValue = currentGreenPinValue;
+    lastBluePinValue = currentBluePinValue;
+    currentRedPinValue = currentGreenPinValue = currentBluePinValue = 255;
+  }
+  analogWrite(rgbRedPin, currentRedPinValue);
+  analogWrite(rgbGreenPin, currentGreenPinValue);
+  analogWrite(rgbBluePin, currentBluePinValue);
 }
 
 //////////////////////
@@ -163,6 +183,9 @@ void processData() {
       case TIMER_OFF_COMMAND:
         timerOffCommand();
         break;
+      case ANIMATION_COMMAND:
+        animationCommand();
+        break;
   }
   allDataReceived = false;
 }
@@ -186,18 +209,130 @@ void timerOnCommand() {
   }
 
   timerOn = bytesToInt32(commandDataPtr + 3); // skip 3 color bytes
-  startTimerOn = millis();
+  startTimerOn = currentTime;
 }
 
 void timerOffCommand() {
   if (dataRecvCount != 4) return; // Invalid command data
 
   timerOff = bytesToInt32(commandDataPtr);
-  startTimerOff = millis();
+  startTimerOff = currentTime;
+}
+
+void animationCommand() {
+  if (dataRecvCount != 1 && dataRecvCount != 3) return; // Invalid command data
+
+  if (animationType == NULL) { // No current animation is running
+    redPinBeforeAnimation = currentRedPinValue;
+    greenPinBeforeAnimation = currentGreenPinValue;
+    bluePinBeforeAnimation = currentBluePinValue;
+  }
+
+  stopAnimation(true); // Stop the current animation
+  if (currentRedPinValue == 255 && currentGreenPinValue == 255  && currentBluePinValue == 255) { // if turned off, don't start animation
+    return;
+  }
+
+  animationPeriod = bytesToWord(commandDataPtr + 1);
+  if (animationPeriod == 0) { // if animationPeriod is 0, don't start animation
+    return;
+  }
+
+  animationType = commandDataPtr[0];
+  animationStartTime = currentTime;
+  timePerFadeStep = 0;
+}
+
+void animate() {
+  switch (animationType) {
+    case FADE_ANIMATION:
+      fade();
+      break;
+    case BLINK_ANIMATION:
+      blink();
+      break;
+  }
+}
+
+void fade() {
+  if (timePerFadeStep == 0) {
+    redPinFadeValue = currentRedPinValue;
+    greenPinFadeValue = currentGreenPinValue;
+    bluePinFadeValue = currentBluePinValue;
+    byte fadeMinColor = min(currentRedPinValue, min(currentGreenPinValue, currentBluePinValue));
+    float numberOfFadeSteps = 255 - fadeMinColor;
+    if (numberOfFadeSteps == 0) return; // numberOfFadeSteps is 0 when led is turned off
+
+    redFadeDiff = currentRedPinValue == 255 ? 0 : (255 - currentRedPinValue) / numberOfFadeSteps;
+    greenFadeDiff = currentGreenPinValue == 255 ? 0 : (255 - currentGreenPinValue) / numberOfFadeSteps;
+    blueFadeDiff = currentBluePinValue == 255 ? 0 : (255 - currentBluePinValue) / numberOfFadeSteps;
+    float timePerFadeStepFloat = animationPeriod / numberOfFadeSteps;
+    // In case animationPeriod is less than numberOfFadeSteps (for example period: 200ms steps: 255)
+    // when converted division to int, timePerFadeStep will be 0 which will make this code repete forever
+    while (timePerFadeStepFloat < 1) {
+      timePerFadeStepFloat *= 2;
+      redFadeDiff *= 2;
+      greenFadeDiff *= 2;
+      blueFadeDiff *= 2;
+    }
+    timePerFadeStep = (unsigned long) timePerFadeStepFloat;
+  }
+
+  if (currentTime - animationStartTime > timePerFadeStep) {
+    if (redPinFadeValue == 255 && greenPinFadeValue == 255 && bluePinFadeValue == 255) {
+      fadeIn = true;
+    }
+    if (redPinFadeValue == currentRedPinValue && greenPinFadeValue == currentGreenPinValue && bluePinFadeValue == currentBluePinValue) {
+      fadeIn = false;
+    }
+
+    redPinFadeValue = fadeIn ? redPinFadeValue - redFadeDiff : redPinFadeValue + redFadeDiff;
+    if (redPinFadeValue < currentRedPinValue) redPinFadeValue = currentRedPinValue;
+    if (redPinFadeValue > 255) redPinFadeValue = 255;
+
+    greenPinFadeValue = fadeIn ? greenPinFadeValue - greenFadeDiff : greenPinFadeValue + greenFadeDiff;
+    if (greenPinFadeValue < currentGreenPinValue) greenPinFadeValue = currentGreenPinValue;
+    if (greenPinFadeValue > 255) greenPinFadeValue = 255;
+
+    bluePinFadeValue = fadeIn ? bluePinFadeValue - blueFadeDiff : bluePinFadeValue + blueFadeDiff;
+    if (bluePinFadeValue < currentBluePinValue) bluePinFadeValue = currentBluePinValue;
+    if (bluePinFadeValue > 255) bluePinFadeValue = 255;
+
+    analogWrite(rgbRedPin, redPinFadeValue);
+    analogWrite(rgbGreenPin, greenPinFadeValue);
+    analogWrite(rgbBluePin, bluePinFadeValue);
+
+    animationStartTime = currentTime;
+  }
+}
+
+void blink() {
+  if (currentTime - animationStartTime > animationPeriod) {
+    toggleLed();
+    animationStartTime = currentTime;
+  }
+}
+
+void stopAnimation(boolean revertColors) {
+  if (revertColors) {
+    // Revert led state to before animation
+    analogWrite(rgbRedPin, redPinBeforeAnimation);
+    analogWrite(rgbGreenPin, greenPinBeforeAnimation);
+    analogWrite(rgbBluePin, bluePinBeforeAnimation);
+    currentRedPinValue = redPinBeforeAnimation;
+    currentGreenPinValue = greenPinBeforeAnimation;
+    currentBluePinValue = bluePinBeforeAnimation;
+  }
+
+  animationType = NULL;
+}
+
+void resetAnimation() {
+  animationStartTime = currentTime;
+  timePerFadeStep = 0;
 }
 
 void processTimers() {
-  currentTime = millis();
   if (timerOff != 0 && currentTime - startTimerOff >= timerOff) {
     // Turn off led
     analogWriteColors(0, 0, 0);
@@ -212,21 +347,30 @@ void processTimers() {
 }
 
 void analogWriteColors(byte red, byte green, byte blue) {
-  if (red == 0 && green == 0 && blue == 0) { // If i about to turn off
-    if (currentRedPinValue != 255 || currentGreenPinValue != 255 || currentBluePinValue != 255) { // save current values only if not currently already turend off
+  if (red == 0 && green == 0 && blue == 0) { // If I'm about to turn off
+    stopAnimation(false); // Stop the current animation
+    if (currentRedPinValue != 255 || currentGreenPinValue != 255 || currentBluePinValue != 255) { // save current values only if not currently turend off
       lastRedPinValue = currentRedPinValue;
       lastGreenPinValue = currentGreenPinValue;
       lastBluePinValue = currentBluePinValue;
     }
+  } else { // If set new color
+    resetAnimation(); // Resets the current animation
   }
 
   // scale the values with map() so that the R, G, and B brightnesses are balanced.
   currentRedPinValue = 255 - map(red, 0, 255, 0, max_red);
   currentGreenPinValue = 255 - map(green, 0, 255, 0, max_green);
   currentBluePinValue = 255 - map(blue, 0, 255, 0, max_blue);
+
   analogWrite(rgbRedPin, currentRedPinValue);
   analogWrite(rgbGreenPin, currentGreenPinValue);
   analogWrite(rgbBluePin, currentBluePinValue);
+
+  // Save new color for animation revert
+  redPinBeforeAnimation = currentRedPinValue;
+  greenPinBeforeAnimation = currentGreenPinValue;
+  bluePinBeforeAnimation = currentBluePinValue;
 }
 
 unsigned long bytesToInt32(byte* bytes) {
@@ -234,6 +378,14 @@ unsigned long bytesToInt32(byte* bytes) {
 
   value = (value << 8) + bytes[3];
   value = (value << 8) + bytes[2];
+  value = (value << 8) + bytes[1];
+  value = (value << 8) + bytes[0];
+  return value;
+}
+
+word bytesToWord(byte* bytes) {
+  word value = 0;
+
   value = (value << 8) + bytes[1];
   value = (value << 8) + bytes[0];
   return value;

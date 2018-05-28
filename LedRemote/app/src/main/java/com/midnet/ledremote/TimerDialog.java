@@ -96,7 +96,7 @@ public class TimerDialog extends DialogFragment {
                     }
                     if (canCloseDialog) {
                         dismiss();
-                        mListener.onDialogPositiveClick(TimerDialog.this);
+                        mListener.onTimerDialogPositiveClick(TimerDialog.this);
                     }
                     //else dialog stays open. Make sure you have an obvious way to close the dialog especially if you set cancellable to false.
                 }
@@ -109,7 +109,7 @@ public class TimerDialog extends DialogFragment {
      * implement this interface in order to receive event callbacks.
      * Each method passes the DialogFragment in case the host needs to query it. */
     public interface TimerDialogListener {
-        public void onDialogPositiveClick(DialogFragment dialog);
+        public void onTimerDialogPositiveClick(DialogFragment dialog);
     }
 
     // Use this instance of the interface to deliver action events

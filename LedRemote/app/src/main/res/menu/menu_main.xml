@@ -8,7 +8,14 @@
         android:id="@+id/action_set_timer"
         android:icon="@drawable/timer"
         android:title="@string/set_timer"
-        app:showAsAction="ifRoom"/>
+        app:showAsAction="always"/>
+
+    <!-- "Set Timer", should appear as action button if possible -->
+    <item
+        android:id="@+id/action_animation"
+        android:icon="@drawable/animation"
+        android:title="@string/animation"
+        app:showAsAction="always"/>
 
     <!-- Settings, should always be in the overflow -->
     <item

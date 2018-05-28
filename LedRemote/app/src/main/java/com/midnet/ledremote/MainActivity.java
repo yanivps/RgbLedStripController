@@ -32,7 +32,7 @@ import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
-public class MainActivity extends AppCompatActivity implements View.OnTouchListener, SeekBar.OnSeekBarChangeListener, TimerDialog.TimerDialogListener {
+public class MainActivity extends AppCompatActivity implements View.OnTouchListener, SeekBar.OnSeekBarChangeListener, TimerDialog.TimerDialogListener, AnimationDialog.AnimationDialogListener {
     public final static String TAG = "LedRemote";
     private static final int SETTINGS_ACTIVITY_REQUEST = 1;
 
@@ -42,6 +42,9 @@ public class MainActivity extends AppCompatActivity implements View.OnTouchListe
     private static final byte SET_COLOR_COMMAND = (byte) 0x01;
     private static final byte TIMER_ON_COMMAND = (byte) 0x02;
     private static final byte TIMER_OFF_COMMAND = (byte) 0x03;
+    private static final byte ANIMATION_COMMAND = (byte) 0x04;
+    private static final byte FADE_ANIMATION_CODE = (byte) 0x01;
+    private static final byte BLINK_ANIMATION_CODE = (byte) 0x02;
 
     public ColorPickerView colorPicker;
     private SeekBar seek;
@@ -131,6 +134,7 @@ public class MainActivity extends AppCompatActivity implements View.OnTouchListe
         // Inflate the menu; this adds items to the action bar if it is present.
         getMenuInflater().inflate(R.menu.menu_main, menu);
         menu.findItem(R.id.action_set_timer).setVisible(mIsConnected);
+        menu.findItem(R.id.action_animation).setVisible(mIsConnected);
         return true;
     }
 
@@ -143,8 +147,13 @@ public class MainActivity extends AppCompatActivity implements View.OnTouchListe
                 return true;
 
             case R.id.action_set_timer:
-                DialogFragment dialog = new TimerDialog();
-                dialog.show(getSupportFragmentManager(), "timer");
+                DialogFragment timerDialog = new TimerDialog();
+                timerDialog.show(getSupportFragmentManager(), "timer");
+                return true;
+
+            case R.id.action_animation:
+                DialogFragment animationDialog = new AnimationDialog();
+                animationDialog.show(getSupportFragmentManager(), "animation");
                 return true;
 
             default:
@@ -155,7 +164,13 @@ public class MainActivity extends AppCompatActivity implements View.OnTouchListe
     }
 
     @Override
-    public void onDialogPositiveClick(DialogFragment dialog) {
+    public void onAnimationDialogPositiveClick(DialogFragment dialog) {
+        AnimationDialog animationDialog = (AnimationDialog) dialog;
+        sendAnimationToLedDevice(animationDialog.getDuration(), animationDialog.getAnimationType());
+    }
+
+    @Override
+    public void onTimerDialogPositiveClick(DialogFragment dialog) {
         TimerDialog timerDialog = (TimerDialog) dialog;
         mTimerMilliseconds = (timerDialog.getHours() * 60 + timerDialog.getMinutes() * 60 + timerDialog.getSeconds()) * 1000;
         TimerDialog.TimerType timerType = timerDialog.getTimerType();
@@ -377,6 +392,43 @@ public class MainActivity extends AppCompatActivity implements View.OnTouchListe
         byte[] dataToSend = encodePacketData(data);
         sendDataToDeviceTask = new SendDataToDeviceTask();
         sendDataToDeviceTask.execute(new SendDataToDeviceTaskArgs(dataToSend, "Off timer set!"));
+    }
+
+    public void sendAnimationToLedDevice(float duration, AnimationDialog.AnimationType animationType) {
+        short durationInMillis = (short) (duration * 1000);
+        byte animationCode;
+        switch (animationType) {
+            case FADE:
+                animationCode = FADE_ANIMATION_CODE;
+                break;
+            case BLINK:
+                animationCode = BLINK_ANIMATION_CODE;
+                break;
+            default:
+                animationCode = 0; // Stops animation
+                break;
+        }
+        Log.d(TAG, "Sending to led device animation");
+        byte[] serializedDuration = ByteBuffer.allocate(2).order(ByteOrder.LITTLE_ENDIAN).putShort(durationInMillis).array();
+        byte[] data = new byte[6];
+        data[0] = START_MARKER;
+        data[1] = ANIMATION_COMMAND;
+        data[2] = animationCode;
+        for (int i = 0; i < 2; i++) {
+            data[i + 3] = serializedDuration[i];
+        }
+        data[5] = END_MARKER;
+        byte[] dataToSend = encodePacketData(data);
+        sendDataToDeviceTask = new SendDataToDeviceTask();
+        String message;
+        if (animationCode == 0 || durationInMillis == 0) {
+            message = "Stops animation!";
+        } else {
+            String animationName = animationType.name().toLowerCase();
+            animationName = animationName.substring(0, 1).toUpperCase() + animationName.substring(1);
+            message = String.format("%s animation of %.2f sec set!", animationName, duration);
+        }
+        sendDataToDeviceTask.execute(new SendDataToDeviceTaskArgs(dataToSend, message));
     }
 
     public void checkConnection() {
