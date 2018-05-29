@@ -28,12 +28,14 @@ unsigned long timerOn = 0;
 // Animations definitions
 unsigned long animationStartTime = 0;
 unsigned long animationPeriod = 0;
-unsigned long timePerFadeStep = 0;
 byte animationType;
+boolean randomAnimationColors;
+boolean isFadeInitialized;
 boolean fadeIn;
 float redPinFadeValue, redFadeDiff;
 float greenPinFadeValue, greenFadeDiff;
 float bluePinFadeValue, blueFadeDiff;
+#define FADE_STEP_MILLIS_INTERVAL 10
 
 #define BUTTON_PRESSED LOW
 const int onOffButtonPin = 2;
@@ -60,6 +62,7 @@ byte timerOnColors[3] = {0, 0, 0}; // array to store led brightness values of fu
 void setup()
 {
   Serial.begin(115200);
+  randomSeed(analogRead(0));
 
   pinMode(onOffButtonPin, INPUT_PULLUP);
   attachInterrupt(0, buttonStateChanged, FALLING);
@@ -220,7 +223,7 @@ void timerOffCommand() {
 }
 
 void animationCommand() {
-  if (dataRecvCount != 1 && dataRecvCount != 3) return; // Invalid command data
+  if (dataRecvCount != 1 && dataRecvCount != 4) return; // Invalid command data
 
   if (animationType == NULL) { // No current animation is running
     redPinBeforeAnimation = currentRedPinValue;
@@ -239,8 +242,9 @@ void animationCommand() {
   }
 
   animationType = commandDataPtr[0];
+  randomAnimationColors = commandDataPtr[3];
   animationStartTime = currentTime;
-  timePerFadeStep = 0;
+  isFadeInitialized = false;
 }
 
 void animate() {
@@ -255,32 +259,29 @@ void animate() {
 }
 
 void fade() {
-  if (timePerFadeStep == 0) {
+  if (!isFadeInitialized) {
     redPinFadeValue = currentRedPinValue;
     greenPinFadeValue = currentGreenPinValue;
     bluePinFadeValue = currentBluePinValue;
-    byte fadeMinColor = min(currentRedPinValue, min(currentGreenPinValue, currentBluePinValue));
-    float numberOfFadeSteps = 255 - fadeMinColor;
-    if (numberOfFadeSteps == 0) return; // numberOfFadeSteps is 0 when led is turned off
-
-    redFadeDiff = currentRedPinValue == 255 ? 0 : (255 - currentRedPinValue) / numberOfFadeSteps;
-    greenFadeDiff = currentGreenPinValue == 255 ? 0 : (255 - currentGreenPinValue) / numberOfFadeSteps;
-    blueFadeDiff = currentBluePinValue == 255 ? 0 : (255 - currentBluePinValue) / numberOfFadeSteps;
-    float timePerFadeStepFloat = animationPeriod / numberOfFadeSteps;
-    // In case animationPeriod is less than numberOfFadeSteps (for example period: 200ms steps: 255)
-    // when converted division to int, timePerFadeStep will be 0 which will make this code repete forever
-    while (timePerFadeStepFloat < 1) {
-      timePerFadeStepFloat *= 2;
-      redFadeDiff *= 2;
-      greenFadeDiff *= 2;
-      blueFadeDiff *= 2;
-    }
-    timePerFadeStep = (unsigned long) timePerFadeStepFloat;
+    redFadeDiff = (255 - currentRedPinValue) / (float) animationPeriod * FADE_STEP_MILLIS_INTERVAL;
+    greenFadeDiff = (255 - currentGreenPinValue) / (float) animationPeriod * FADE_STEP_MILLIS_INTERVAL;
+    blueFadeDiff = (255 - currentBluePinValue) / (float) animationPeriod * FADE_STEP_MILLIS_INTERVAL;
+    isFadeInitialized = true;
   }
 
-  if (currentTime - animationStartTime > timePerFadeStep) {
+  if (currentTime - animationStartTime > FADE_STEP_MILLIS_INTERVAL) {
     if (redPinFadeValue == 255 && greenPinFadeValue == 255 && bluePinFadeValue == 255) {
       fadeIn = true;
+      if (randomAnimationColors) { // change color and recalculate fade diffs
+        do {
+          currentRedPinValue = random(255 - max_red, 255);
+          currentGreenPinValue = random(255 - max_green, 255);
+          currentBluePinValue = random(255 - max_blue, 255);
+        } while (currentRedPinValue == 0 && currentGreenPinValue == 0 && currentBluePinValue == 0);
+        redFadeDiff = (255 - currentRedPinValue) / (float) animationPeriod * FADE_STEP_MILLIS_INTERVAL;
+        greenFadeDiff = (255 - currentGreenPinValue) / (float) animationPeriod * FADE_STEP_MILLIS_INTERVAL;
+        blueFadeDiff = (255 - currentBluePinValue) / (float) animationPeriod * FADE_STEP_MILLIS_INTERVAL;
+      }
     }
     if (redPinFadeValue == currentRedPinValue && greenPinFadeValue == currentGreenPinValue && bluePinFadeValue == currentBluePinValue) {
       fadeIn = false;
@@ -308,7 +309,19 @@ void fade() {
 
 void blink() {
   if (currentTime - animationStartTime > animationPeriod) {
-    toggleLed();
+    // If random animation colors and led is turned off, generate random colors
+    if (randomAnimationColors && currentRedPinValue == 255 && currentGreenPinValue == 255  && currentBluePinValue == 255) { // if turned off, and we random animation colors
+      do {
+        currentRedPinValue = random(255 - max_red, 255);
+        currentGreenPinValue = random(255 - max_green, 255);
+        currentBluePinValue = random(255 - max_blue, 255);
+      } while (currentRedPinValue == 0 && currentGreenPinValue == 0 && currentBluePinValue == 0);
+      analogWrite(rgbRedPin, currentRedPinValue);
+      analogWrite(rgbGreenPin, currentGreenPinValue);
+      analogWrite(rgbBluePin, currentBluePinValue);
+    } else { // No random animation colors or led is turned on, toggle led normally
+      toggleLed();
+    }
     animationStartTime = currentTime;
   }
 }
@@ -329,7 +342,7 @@ void stopAnimation(boolean revertColors) {
 
 void resetAnimation() {
   animationStartTime = currentTime;
-  timePerFadeStep = 0;
+  isFadeInitialized = false;
 }
 
 void processTimers() {

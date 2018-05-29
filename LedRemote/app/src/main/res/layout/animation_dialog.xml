@@ -14,7 +14,8 @@
     <LinearLayout
         android:orientation="horizontal"
         android:layout_width="wrap_content"
-        android:layout_height="wrap_content">
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="16dp">
 
 
         <TextView
@@ -41,5 +42,11 @@
             android:text="seconds (max 60.0)"
             android:textSize="15dp"/>
     </LinearLayout>
+
+    <CheckBox
+        android:id="@+id/randomColorsCheckBox"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/random_colors"/>
 
 </LinearLayout>

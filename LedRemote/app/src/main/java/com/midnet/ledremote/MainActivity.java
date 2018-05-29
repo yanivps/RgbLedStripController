@@ -166,7 +166,10 @@ public class MainActivity extends AppCompatActivity implements View.OnTouchListe
     @Override
     public void onAnimationDialogPositiveClick(DialogFragment dialog) {
         AnimationDialog animationDialog = (AnimationDialog) dialog;
-        sendAnimationToLedDevice(animationDialog.getDuration(), animationDialog.getAnimationType());
+        sendAnimationToLedDevice(
+                animationDialog.getDuration(),
+                animationDialog.getAnimationType(),
+                animationDialog.getRandomColors());
     }
 
     @Override
@@ -394,7 +397,7 @@ public class MainActivity extends AppCompatActivity implements View.OnTouchListe
         sendDataToDeviceTask.execute(new SendDataToDeviceTaskArgs(dataToSend, "Off timer set!"));
     }
 
-    public void sendAnimationToLedDevice(float duration, AnimationDialog.AnimationType animationType) {
+    public void sendAnimationToLedDevice(float duration, AnimationDialog.AnimationType animationType, Boolean randomColors) {
         short durationInMillis = (short) (duration * 1000);
         byte animationCode;
         switch (animationType) {
@@ -410,14 +413,15 @@ public class MainActivity extends AppCompatActivity implements View.OnTouchListe
         }
         Log.d(TAG, "Sending to led device animation");
         byte[] serializedDuration = ByteBuffer.allocate(2).order(ByteOrder.LITTLE_ENDIAN).putShort(durationInMillis).array();
-        byte[] data = new byte[6];
+        byte[] data = new byte[7];
         data[0] = START_MARKER;
         data[1] = ANIMATION_COMMAND;
         data[2] = animationCode;
         for (int i = 0; i < 2; i++) {
             data[i + 3] = serializedDuration[i];
         }
-        data[5] = END_MARKER;
+        data[5] = (byte) (randomColors ? 0x01 : 0x00);
+        data[6] = END_MARKER;
         byte[] dataToSend = encodePacketData(data);
         sendDataToDeviceTask = new SendDataToDeviceTask();
         String message;

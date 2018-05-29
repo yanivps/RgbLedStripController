@@ -21,6 +21,7 @@
     <string name="animation">Animation</string>
     <string name="duration">Duration</string>
     <string name="stop">Stop</string>
+    <string name="random_colors">Random Colors</string>
 
     <string-array name="animation_array">
         <item>Choose animation...</item>

@@ -10,6 +10,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.ListAdapter;
 import android.widget.NumberPicker;
@@ -19,6 +20,7 @@ import android.widget.Toast;
 public class AnimationDialog extends DialogFragment {
     private float mDuration;
     private AnimationType mAnimationType;
+    private Boolean mRandomColors = false;
 
     public enum AnimationType {
         OFF,
@@ -85,6 +87,7 @@ public class AnimationDialog extends DialogFragment {
         {
             final Spinner spinnerAnimation = d.findViewById(R.id.animationSpinner);
             final EditText etDuration = d.findViewById(R.id.animationDurationEditText);
+            final CheckBox cbRandomColors = d.findViewById(R.id.randomColorsCheckBox);
 
             Button positiveButton = d.getButton(Dialog.BUTTON_POSITIVE);
             positiveButton.setOnClickListener(new View.OnClickListener()
@@ -104,6 +107,7 @@ public class AnimationDialog extends DialogFragment {
                     } catch (IndexOutOfBoundsException ex) {
                         mAnimationType = AnimationType.OFF;
                     }
+                    mRandomColors = cbRandomColors.isChecked();
 
                     Boolean canCloseDialog = true;
                     if (position == 0) {
@@ -156,5 +160,9 @@ public class AnimationDialog extends DialogFragment {
 
     public AnimationType getAnimationType() {
         return mAnimationType;
+    }
+
+    public Boolean getRandomColors() {
+        return mRandomColors;
     }
 }
