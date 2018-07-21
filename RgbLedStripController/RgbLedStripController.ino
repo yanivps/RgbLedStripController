@@ -44,15 +44,15 @@ const int onOffButtonPin = 2;
 //pin definitions.  must be PWM-capable pins!
 const int rgbRedPin = 5;
 const int rgbGreenPin = 6;
-const int rgbBluePin = 9;
+const int rgbBluePin = 3;
 
 const int max_red = 255;
 const int max_green = 255;
 const int max_blue = 100;
 
-byte currentRedPinValue = 255, lastRedPinValue = 0, redPinBeforeAnimation = 0;
-byte currentGreenPinValue = 255, lastGreenPinValue = 0, greenPinBeforeAnimation = 0;
-byte currentBluePinValue = 255, lastBluePinValue = 0, bluePinBeforeAnimation = 0;
+byte currentRedPinValue = 0, lastRedPinValue = 255, redPinBeforeAnimation = 255;
+byte currentGreenPinValue = 0, lastGreenPinValue = 255, greenPinBeforeAnimation = 255;
+byte currentBluePinValue = 0, lastBluePinValue = 255, bluePinBeforeAnimation = 255;
 
 byte colors[3] = {0, 0, 0}; // array to store led brightness values
 byte timerOnColors[3] = {0, 0, 0}; // array to store led brightness values of future timer
@@ -61,19 +61,19 @@ byte timerOnColors[3] = {0, 0, 0}; // array to store led brightness values of fu
 
 void setup()
 {
-  Serial.begin(115200);
+  Serial.begin(57600);
   randomSeed(analogRead(0));
 
   pinMode(onOffButtonPin, INPUT_PULLUP);
-  attachInterrupt(0, buttonStateChanged, FALLING);
+  attachInterrupt(digitalPinToInterrupt(onOffButtonPin), buttonStateChanged, FALLING);
 
   // Set pins to HIGH first so the rgb led which is 'active low' won't briefly flash on power on
   digitalWrite(rgbRedPin, HIGH);
   digitalWrite(rgbGreenPin, HIGH);
   digitalWrite(rgbBluePin, HIGH);
-  analogWrite(rgbRedPin, 255);
-  analogWrite(rgbGreenPin, 255);
-  analogWrite(rgbBluePin, 255);
+  analogWrite(rgbRedPin, 0);
+  analogWrite(rgbGreenPin, 0);
+  analogWrite(rgbBluePin, 0);
 }
 
 void loop()
@@ -96,16 +96,16 @@ void buttonStateChanged() {
 }
 
 void toggleLed() {
-  if (currentRedPinValue == 255 && currentGreenPinValue == 255  && currentBluePinValue == 255) { // if turned off, turn on
+  if (currentRedPinValue == 0 && currentGreenPinValue == 0  && currentBluePinValue == 0) { // if turned off, turn on
     currentRedPinValue = lastRedPinValue;
     currentGreenPinValue = lastGreenPinValue;
     currentBluePinValue = lastBluePinValue;
-    lastRedPinValue = lastGreenPinValue = lastBluePinValue = 255;
+    lastRedPinValue = lastGreenPinValue = lastBluePinValue = 0;
   } else { // if turned on, turn off.
     lastRedPinValue = currentRedPinValue;
     lastGreenPinValue = currentGreenPinValue;
     lastBluePinValue = currentBluePinValue;
-    currentRedPinValue = currentGreenPinValue = currentBluePinValue = 255;
+    currentRedPinValue = currentGreenPinValue = currentBluePinValue = 0;
   }
   analogWrite(rgbRedPin, currentRedPinValue);
   analogWrite(rgbGreenPin, currentGreenPinValue);
@@ -232,7 +232,7 @@ void animationCommand() {
   }
 
   stopAnimation(true); // Stop the current animation
-  if (currentRedPinValue == 255 && currentGreenPinValue == 255  && currentBluePinValue == 255) { // if turned off, don't start animation
+  if (currentRedPinValue == 0 && currentGreenPinValue == 0  && currentBluePinValue == 0) { // if turned off, don't start animation
     return;
   }
 
@@ -263,41 +263,41 @@ void fade() {
     redPinFadeValue = currentRedPinValue;
     greenPinFadeValue = currentGreenPinValue;
     bluePinFadeValue = currentBluePinValue;
-    redFadeDiff = (255 - currentRedPinValue) / (float) animationPeriod * FADE_STEP_MILLIS_INTERVAL;
-    greenFadeDiff = (255 - currentGreenPinValue) / (float) animationPeriod * FADE_STEP_MILLIS_INTERVAL;
-    blueFadeDiff = (255 - currentBluePinValue) / (float) animationPeriod * FADE_STEP_MILLIS_INTERVAL;
+    redFadeDiff = (currentRedPinValue) / (float) animationPeriod * FADE_STEP_MILLIS_INTERVAL;
+    greenFadeDiff = (currentGreenPinValue) / (float) animationPeriod * FADE_STEP_MILLIS_INTERVAL;
+    blueFadeDiff = (currentBluePinValue) / (float) animationPeriod * FADE_STEP_MILLIS_INTERVAL;
     isFadeInitialized = true;
   }
 
   if (currentTime - animationStartTime > FADE_STEP_MILLIS_INTERVAL) {
-    if (redPinFadeValue == 255 && greenPinFadeValue == 255 && bluePinFadeValue == 255) {
+    if (redPinFadeValue == 0 && greenPinFadeValue == 0 && bluePinFadeValue == 0) {
       fadeIn = true;
       if (randomAnimationColors) { // change color and recalculate fade diffs
         do {
-          currentRedPinValue = random(255 - max_red, 255);
-          currentGreenPinValue = random(255 - max_green, 255);
-          currentBluePinValue = random(255 - max_blue, 255);
+          currentRedPinValue = random(0, max_red);
+          currentGreenPinValue = random(0, max_green);
+          currentBluePinValue = random(0, max_blue);
         } while (currentRedPinValue == 0 && currentGreenPinValue == 0 && currentBluePinValue == 0);
-        redFadeDiff = (255 - currentRedPinValue) / (float) animationPeriod * FADE_STEP_MILLIS_INTERVAL;
-        greenFadeDiff = (255 - currentGreenPinValue) / (float) animationPeriod * FADE_STEP_MILLIS_INTERVAL;
-        blueFadeDiff = (255 - currentBluePinValue) / (float) animationPeriod * FADE_STEP_MILLIS_INTERVAL;
+        redFadeDiff = (currentRedPinValue) / (float) animationPeriod * FADE_STEP_MILLIS_INTERVAL;
+        greenFadeDiff = (currentGreenPinValue) / (float) animationPeriod * FADE_STEP_MILLIS_INTERVAL;
+        blueFadeDiff = (currentBluePinValue) / (float) animationPeriod * FADE_STEP_MILLIS_INTERVAL;
       }
     }
     if (redPinFadeValue == currentRedPinValue && greenPinFadeValue == currentGreenPinValue && bluePinFadeValue == currentBluePinValue) {
       fadeIn = false;
     }
 
-    redPinFadeValue = fadeIn ? redPinFadeValue - redFadeDiff : redPinFadeValue + redFadeDiff;
-    if (redPinFadeValue < currentRedPinValue) redPinFadeValue = currentRedPinValue;
-    if (redPinFadeValue > 255) redPinFadeValue = 255;
+    redPinFadeValue = fadeIn ? redPinFadeValue + redFadeDiff : redPinFadeValue - redFadeDiff;
+    if (redPinFadeValue > currentRedPinValue) redPinFadeValue = currentRedPinValue;
+    if (redPinFadeValue < 0) redPinFadeValue = 0;
 
-    greenPinFadeValue = fadeIn ? greenPinFadeValue - greenFadeDiff : greenPinFadeValue + greenFadeDiff;
-    if (greenPinFadeValue < currentGreenPinValue) greenPinFadeValue = currentGreenPinValue;
-    if (greenPinFadeValue > 255) greenPinFadeValue = 255;
+    greenPinFadeValue = fadeIn ? greenPinFadeValue + greenFadeDiff : greenPinFadeValue - greenFadeDiff;
+    if (greenPinFadeValue > currentGreenPinValue) greenPinFadeValue = currentGreenPinValue;
+    if (greenPinFadeValue < 0) greenPinFadeValue = 0;
 
-    bluePinFadeValue = fadeIn ? bluePinFadeValue - blueFadeDiff : bluePinFadeValue + blueFadeDiff;
-    if (bluePinFadeValue < currentBluePinValue) bluePinFadeValue = currentBluePinValue;
-    if (bluePinFadeValue > 255) bluePinFadeValue = 255;
+    bluePinFadeValue = fadeIn ? bluePinFadeValue + blueFadeDiff : bluePinFadeValue - blueFadeDiff;
+    if (bluePinFadeValue > currentBluePinValue) bluePinFadeValue = currentBluePinValue;
+    if (bluePinFadeValue < 0) bluePinFadeValue = 0;
 
     analogWrite(rgbRedPin, redPinFadeValue);
     analogWrite(rgbGreenPin, greenPinFadeValue);
@@ -310,11 +310,11 @@ void fade() {
 void blink() {
   if (currentTime - animationStartTime > animationPeriod) {
     // If random animation colors and led is turned off, generate random colors
-    if (randomAnimationColors && currentRedPinValue == 255 && currentGreenPinValue == 255  && currentBluePinValue == 255) { // if turned off, and we random animation colors
+    if (randomAnimationColors && currentRedPinValue == 0 && currentGreenPinValue == 0  && currentBluePinValue == 0) { // if turned off, and we random animation colors
       do {
-        currentRedPinValue = random(255 - max_red, 255);
-        currentGreenPinValue = random(255 - max_green, 255);
-        currentBluePinValue = random(255 - max_blue, 255);
+        currentRedPinValue = random(0, max_red);
+        currentGreenPinValue = random(0, max_green);
+        currentBluePinValue = random(0, max_blue);
       } while (currentRedPinValue == 0 && currentGreenPinValue == 0 && currentBluePinValue == 0);
       analogWrite(rgbRedPin, currentRedPinValue);
       analogWrite(rgbGreenPin, currentGreenPinValue);
@@ -362,7 +362,7 @@ void processTimers() {
 void analogWriteColors(byte red, byte green, byte blue) {
   if (red == 0 && green == 0 && blue == 0) { // If I'm about to turn off
     stopAnimation(false); // Stop the current animation
-    if (currentRedPinValue != 255 || currentGreenPinValue != 255 || currentBluePinValue != 255) { // save current values only if not currently turend off
+    if (currentRedPinValue != 0 || currentGreenPinValue != 0 || currentBluePinValue != 0) { // save current values only if not currently turend off
       lastRedPinValue = currentRedPinValue;
       lastGreenPinValue = currentGreenPinValue;
       lastBluePinValue = currentBluePinValue;
@@ -372,9 +372,9 @@ void analogWriteColors(byte red, byte green, byte blue) {
   }
 
   // scale the values with map() so that the R, G, and B brightnesses are balanced.
-  currentRedPinValue = 255 - map(red, 0, 255, 0, max_red);
-  currentGreenPinValue = 255 - map(green, 0, 255, 0, max_green);
-  currentBluePinValue = 255 - map(blue, 0, 255, 0, max_blue);
+  currentRedPinValue = map(red, 0, 255, 0, max_red);
+  currentGreenPinValue = map(green, 0, 255, 0, max_green);
+  currentBluePinValue = map(blue, 0, 255, 0, max_blue);
 
   analogWrite(rgbRedPin, currentRedPinValue);
   analogWrite(rgbGreenPin, currentGreenPinValue);

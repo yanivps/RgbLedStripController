@@ -52,7 +52,7 @@ void setup()
   digitalWrite(PIN_LED, HIGH);
   pinMode(PIN_LED, OUTPUT);
 
-  Serial.begin(115200);
+  Serial.begin(57600);
   Serial.println("\n Starting");
 
   mountFileSystemAndReadConfig();
