@@ -179,6 +179,7 @@ public class MainActivity extends AppCompatActivity implements View.OnTouchListe
         TimerDialog.TimerType timerType = timerDialog.getTimerType();
 
         if (timerType == TimerDialog.TimerType.TURN_ON) {
+            mTimerOnColor = mCurrentColor;
             mSettingTimer = true;
             turnOffButton.setVisibility(View.GONE);
             setTimerColorButton.setVisibility(View.VISIBLE);
