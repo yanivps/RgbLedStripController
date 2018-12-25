@@ -175,7 +175,7 @@ public class MainActivity extends AppCompatActivity implements View.OnTouchListe
     @Override
     public void onTimerDialogPositiveClick(DialogFragment dialog) {
         TimerDialog timerDialog = (TimerDialog) dialog;
-        mTimerMilliseconds = (timerDialog.getHours() * 60 + timerDialog.getMinutes() * 60 + timerDialog.getSeconds()) * 1000;
+        mTimerMilliseconds = (timerDialog.getHours() * 3600 + timerDialog.getMinutes() * 60 + timerDialog.getSeconds()) * 1000;
         TimerDialog.TimerType timerType = timerDialog.getTimerType();
 
         if (timerType == TimerDialog.TimerType.TURN_ON) {
