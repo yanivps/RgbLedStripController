@@ -26,6 +26,10 @@ char hostString[16] = {0};
 
 // Wifi Manager config file saving
 bool shouldSaveConfig = false;
+bool runAsAccessPoint = false; // Allow using server without connecting to a wireless network
+char accessPointSSID[32] = "";
+#define AP_DEFAULT_PASSWORD "12345678"
+char accessPointPassword[64] = AP_DEFAULT_PASSWORD;
 bool staStaticIpFlag = false;
 #define STATIC_IP_DEFAULT_VALUE ""
 #define GATEWAY_DEFAULT_VALUE ""
@@ -83,6 +87,11 @@ void initializeServer() {
 }
 
 void initializeWifi() {
+  if (runAsAccessPoint) {
+    initializeAccessPoint();
+    return;
+  }
+
   if (WiFi.SSID() == "") {
     Serial.println("We haven't got any access point credentials, so get them now");
     initialConfig = true;
@@ -130,6 +139,29 @@ void startConfigurationPortalIfRequested() {
   }
 }
 
+void initializeAccessPoint() {
+  if (strnlen(accessPointSSID, sizeof(accessPointSSID)) == 0) {
+    uint8_t mac[WL_MAC_ADDR_LENGTH];
+    WiFi.softAPmacAddress(mac);
+    String macID = String(mac[WL_MAC_ADDR_LENGTH - 2], HEX) +
+                  String(mac[WL_MAC_ADDR_LENGTH - 1], HEX);
+    macID.toUpperCase();
+    snprintf(accessPointSSID, sizeof(accessPointSSID), "Led Strip AP %s", macID.c_str());
+  }
+
+  if (strnlen(accessPointPassword, sizeof(accessPointPassword)) == 0) {
+    strncpy(accessPointPassword, AP_DEFAULT_PASSWORD, sizeof(accessPointPassword));
+  }
+
+  WiFi.softAP(accessPointSSID, accessPointPassword);
+  IPAddress IP = WiFi.softAPIP();
+  Serial.println("Running as Acess Point:");
+  Serial.print("SSID: ");
+  Serial.println(accessPointSSID);
+  Serial.print("IP address: ");
+  Serial.println(IP);
+}
+
 bool setWifiManagerAP() {
   WiFiManager wifiManager;
 
@@ -147,58 +179,114 @@ bool setWifiManagerAP() {
     AP_NameChar[i] = AP_NameString.charAt(i);
 
 
-  char staStaticIpFlagCustomHtml[63] = "type=\"checkbox\" style=\"width: auto;\" onclick=\"toggle()\"";
+  char staStaticIpFlagCustomHtml[82] = "type=\"checkbox\" style=\"width: auto; margin-right: 5px\" onclick=\"toggle()\"";
+  char runAsAccessPointCustomHtml[82] = "type=\"checkbox\" style=\"width: auto; margin-right: 5px\" onclick=\"toggle()\"";
 
   if (staStaticIpFlag) {
     strcat(staStaticIpFlagCustomHtml, " checked");
   }
-  WiFiManagerParameter p_staStaticIpFlag("staStaticIpFlag", "Static IP", "T", 2, staStaticIpFlagCustomHtml);
-  WiFiManagerParameter p_staStaticIpLabel("<label for=\"staStaticIpFlag\">Static IP</label>");
-  WiFiManagerParameter p_staticIp("staStaticIp", "Static IP", staStaticIp, 16, "minlength=\"7\" maxlength=\"15\"");
-  WiFiManagerParameter p_gateway("staGateway", "Gateway", staGateway, 16, "minlength=\"7\" maxlength=\"15\"");
-  WiFiManagerParameter p_subnet("staSubnet", "Subnet", staSubnet, 16, "minlength=\"7\" maxlength=\"15\"");
-  WiFiManagerParameter p_scriptTag("<script>function toggle(){var cb=document.getElementById(\"staStaticIpFlag\"),ip=document.getElementById(\"staStaticIp\"),gw=document.getElementById(\"staGateway\"),sn=document.getElementById(\"staSubnet\");var d=cb.checked?\"block\":\"none\";ip.style.display=gw.style.display=sn.style.display=d};toggle();</script>");
+  if (runAsAccessPoint) {
+    strcat(runAsAccessPointCustomHtml, " checked");
+  }
 
+  WiFiManagerParameter lineBreak("<br>");
+  WiFiManagerParameter p_runAsAccessPoint("runAsAccessPoint", "Run as Access Point", "T", 2,
+                                         runAsAccessPointCustomHtml, WFM_LABEL_AFTER);
+  if (strnlen(accessPointSSID, sizeof(accessPointSSID)) == 0) {
+    snprintf(accessPointSSID, sizeof(accessPointSSID), "Led Strip AP %s", macID.c_str());
+  }
+  WiFiManagerParameter p_accessPointSSID("accessPointSSID", "AP SSID", accessPointSSID, 32,
+                                  "minlength=\"3\" maxlength=\"31\"");
+  WiFiManagerParameter p_accessPointPassword("accessPointPassword", "AP Password", accessPointPassword, 64,
+                                  "minlength=\"8\" maxlength=\"63\"");
+  WiFiManagerParameter p_staStaticIpFlag("staStaticIpFlag", "Static IP", "T", 2,
+                                         staStaticIpFlagCustomHtml, WFM_LABEL_AFTER);
+  WiFiManagerParameter p_staticIp("staStaticIp", "Static IP", staStaticIp, 16,
+                                  "minlength=\"7\" maxlength=\"15\"");
+  WiFiManagerParameter p_gateway("staGateway", "Gateway", staGateway, 16,
+                                 "minlength=\"7\" maxlength=\"15\"");
+  WiFiManagerParameter p_subnet("staSubnet", "Subnet", staSubnet, 16,
+                                "minlength=\"7\" maxlength=\"15\"");
+  WiFiManagerParameter p_scriptTag(
+      "<script>function toggle(){var "
+      "cb=document.getElementById(\"staStaticIpFlag\"),cb2=document.getElementById(\"runAsAccessPoint\"),ip=document.getElementById(\"staStaticIp\"),"
+      "ipLabel=document.querySelector('label[for=\"staStaticIp\"]'),"
+      "gw=document.getElementById(\"staGateway\"),gwLabel=document.querySelector('label[for="
+      "\"staGateway\"]'),sn=document.getElementById(\"staSubnet\"),snLabel=document.querySelector("
+      "'label[for=\"staSubnet\"]'),apSSID=document.getElementById(\"accessPointSSID\"),apSSIDLabel=document.querySelector('label[for=\"accessPointSSID\"]'),"
+      "apPass=document.getElementById(\"accessPointPassword\"),apPassLabel=document.querySelector('label[for=\"accessPointPassword\"]');var "
+      "d=cb.checked?\"block\":\"none\",dl=cb.checked?\"inline-block\":\"none\";"
+      "d2=cb2.checked?\"block\":\"none\",dl2=cb2.checked?\"inline-block\":\"none\";"
+      "ip.style.display=gw.style.display=sn.style.display=d;"
+      "apSSID.style.display=apPass.style.display=d2;"
+      "ipLabel.style.display=gwLabel.style.display=snLabel.style.display=dl;"
+      "apSSIDLabel.style.display=apPassLabel.style.display=dl2;"
+      "ipLabel.nextElementSibling.style.display=gwLabel.nextElementSibling.style.display=snLabel.nextElementSibling.style.display=d;"
+      "apSSIDLabel.nextElementSibling.style.display=apPassLabel.nextElementSibling.style.display=d2;"
+      "};toggle();</script>");
+
+  wifiManager.addParameter(&p_runAsAccessPoint);
+  wifiManager.addParameter(&lineBreak);
+  wifiManager.addParameter(&p_accessPointSSID);
+  wifiManager.addParameter(&p_accessPointPassword);
+  wifiManager.addParameter(&lineBreak);
   wifiManager.addParameter(&p_staStaticIpFlag);
-  wifiManager.addParameter(&p_staStaticIpLabel);
+  wifiManager.addParameter(&lineBreak);
   wifiManager.addParameter(&p_staticIp);
   wifiManager.addParameter(&p_gateway);
   wifiManager.addParameter(&p_subnet);
   wifiManager.addParameter(&p_scriptTag);
+  wifiManager.addParameter(&lineBreak);
 
   wifiManager.setSaveConfigCallback(saveConfigCallback);
 
   WiFi.disconnect(true); // TODO: Workaround because wifi manager thinks we are already connected and do not change to new selected wifi network. remove upon new version
-  if (wifiManager.startConfigPortal(AP_NameChar, WiFiAPPSK)) { // blocking operation until we configure wifi
+
+  wifiManager.setBreakAfterConfig(true);
+  // blocking operation until we configure wifi
+  bool isWifiConfigured = wifiManager.startConfigPortal(AP_NameChar, WiFiAPPSK);
+
+  runAsAccessPoint = (strncmp(p_runAsAccessPoint.getValue(), "T", 1) == 0);
+  if (runAsAccessPoint) {
+    strncpy(accessPointSSID, p_accessPointSSID.getValue(), sizeof(accessPointSSID));
+    strncpy(accessPointPassword, p_accessPointPassword.getValue(), sizeof(accessPointPassword));
+  }
+
+  if (isWifiConfigured) {
     // Wifi was configured. Read updated parameters
     staStaticIpFlag = (strncmp(p_staStaticIpFlag.getValue(), "T", 1) == 0);
     strcpy(staStaticIp, staStaticIpFlag ? p_staticIp.getValue() : STATIC_IP_DEFAULT_VALUE);
     strcpy(staGateway, staStaticIpFlag ? p_gateway.getValue() : GATEWAY_DEFAULT_VALUE);
     strcpy(staSubnet, staStaticIpFlag ? p_subnet.getValue() : SUBNET_DEFAULT_VALUE);
+  }
 
-    //save the custom parameters to FS
-    if (shouldSaveConfig) {
-      Serial.println("saving config");
-      DynamicJsonBuffer jsonBuffer;
-      JsonObject& json = jsonBuffer.createObject();
+  //save the custom parameters to FS
+  if (shouldSaveConfig) {
+    Serial.println("saving config");
+    DynamicJsonBuffer jsonBuffer;
+    JsonObject& json = jsonBuffer.createObject();
+    json["runAsAccessPoint"] = runAsAccessPoint;
+    json["accessPointSSID"] = accessPointSSID;
+    json["accessPointPassword"] = accessPointPassword;
+    if (isWifiConfigured) {
       json["staStaticIpFlag"] = staStaticIpFlag;
       json["staStaticIp"] = staStaticIp;
       json["staGateway"] = staGateway;
       json["staSubnet"] = staSubnet;
-
-      File configFile = SPIFFS.open("/config.json", "w");
-      if (!configFile) {
-        Serial.println("failed to open config file for writing");
-      }
-
-      json.printTo(Serial);
-      json.printTo(configFile);
-      configFile.close();
-      //end save
     }
-    return true;
+
+    File configFile = SPIFFS.open("/config.json", "w");
+    if (!configFile) {
+      Serial.println("failed to open config file for writing");
+    }
+
+    json.printTo(Serial);
+    json.printTo(configFile);
+    configFile.close();
+    //end save
   }
-  return false;
+
+  return isWifiConfigured;
 }
 
 //callback notifying us of the need to save config
@@ -229,6 +317,20 @@ void mountFileSystemAndReadConfig() {
         json.printTo(Serial);
         if (json.success()) {
           Serial.println("\nparsed json");
+
+          if (json.containsKey("runAsAccessPoint")) {
+            runAsAccessPoint = json["runAsAccessPoint"];
+          }
+
+          if (json.containsKey("accessPointSSID")) {
+            strncpy(accessPointSSID, json["accessPointSSID"], 32);
+            accessPointSSID[31] = '\0';
+          }
+
+          if (json.containsKey("accessPointPassword")) {
+            strncpy(accessPointPassword, json["accessPointPassword"], 64);
+            accessPointPassword[63] = '\0';
+          }
 
           if (json.containsKey("staStaticIpFlag")) {
             staStaticIpFlag = json["staStaticIpFlag"];
