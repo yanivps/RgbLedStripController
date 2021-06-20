@@ -109,13 +109,13 @@ public class MainActivity extends AppCompatActivity implements View.OnTouchListe
         seek.setOnSeekBarChangeListener(this);
 
         mNsdManager = (NsdManager) getSystemService(Context.NSD_SERVICE);
-        initializeConnectionSettings();
-        initializeDiscoveryListener();
-        initializeResolveListener();
 
         AsyncTask.execute(new Runnable() {
             @Override
             public void run() {
+                initializeConnectionSettings();
+                initializeDiscoveryListener();
+                initializeResolveListener();
                 mNsdManager.discoverServices(
                         SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, mDiscoveryListener);
                 synchronized(mCheckConnectionLockObject) {
@@ -475,22 +475,31 @@ public class MainActivity extends AppCompatActivity implements View.OnTouchListe
     }
 
     private void reloadNewConnectionSettings() {
-        InetAddress oldHostAddress = mHostAddress;
-        int oldPort = mPort;
-        initializeConnectionSettings();
-        if (!oldHostAddress.equals(mHostAddress) || oldPort != mPort) {
-            // Connection settings were changed. check connection again
-            mIsConnected = false;
-            invalidateOptionsMenu();
-            initialText.setText(R.string.connecting);
-            initialText.setVisibility(View.VISIBLE);
-            if (checkConnectionThread != null) {
-                // If settings were changed, stop last try to connect before starting a new one
-                checkConnectionThread.interrupt();
+        final InetAddress oldHostAddress = mHostAddress;
+        final int oldPort = mPort;
+        AsyncTask.execute(new Runnable() {
+            @Override
+            public void run() {
+                initializeConnectionSettings();
+                runOnUiThread(new Runnable() {
+                    public void run() {
+                        if (!oldHostAddress.equals(mHostAddress) || oldPort != mPort) {
+                            // Connection settings were changed. check connection again
+                            mIsConnected = false;
+                            invalidateOptionsMenu();
+                            initialText.setText(R.string.connecting);
+                            initialText.setVisibility(View.VISIBLE);
+                            if (checkConnectionThread != null) {
+                                // If settings were changed, stop last try to connect before starting a new one
+                                checkConnectionThread.interrupt();
+                            }
+                            checkConnectionThread = new Thread(new CheckConnectionTask());
+                            checkConnectionThread.start();
+                        }
+                    }
+                });
             }
-            checkConnectionThread = new Thread(new CheckConnectionTask());
-            checkConnectionThread.start();
-        }
+        });
     }
 
     public class CheckConnectionTask implements Runnable {
@@ -542,7 +551,11 @@ public class MainActivity extends AppCompatActivity implements View.OnTouchListe
         try {
             mHostAddress = InetAddress.getByName(ipString);
         } catch (UnknownHostException e) {
-            Toast.makeText(MainActivity.this, "Invalid IP Address in settings", Toast.LENGTH_LONG).show();
+            runOnUiThread(new Runnable() {
+                public void run() {
+                    Toast.makeText(MainActivity.this, "Invalid IP Address in settings", Toast.LENGTH_LONG).show();
+                }
+            });
             try { mHostAddress = InetAddress.getByName(""); } catch (UnknownHostException e1) {}
         }
         mPort = Integer.valueOf(port);
