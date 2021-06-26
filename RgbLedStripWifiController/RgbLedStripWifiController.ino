@@ -43,12 +43,13 @@ bool initialConfig = false;
 
 // MDNS service definitions
 #define MDNS_SERVICE_TYPE "ledstrip"
-#define MDNS_SERVICE_PROTOCOL "tcp"
+#define MDNS_SERVICE_PROTOCOL "udp"
 
 // Wifi server definitions
-#define SERVER_PORT 4000
-WiFiServer server(SERVER_PORT);
-WiFiClient client; // Store client object connected to the server
+#define endMarker 255
+
+WiFiUDP UDPServer;
+#define UDP_SERVER_PORT 4000
 
 void setup()
 {
@@ -64,26 +65,35 @@ void setup()
   initializeWifi();
 }
 
+void handleUDPServer() {
+  int packetSize = UDPServer.parsePacket();
+  if (packetSize == 1) {
+    int recvByte = UDPServer.read();
+    Serial.write(recvByte);
+    if (recvByte == endMarker) {
+      // Send return packet
+      UDPServer.beginPacket(UDPServer.remoteIP(), UDPServer.remotePort());
+      UDPServer.write(endMarker);
+      UDPServer.endPacket();
+    }
+  } else if (packetSize > 1) {
+    while (UDPServer.available() > 0) {
+      Serial.write(UDPServer.read());
+    }
+  }
+}
+
+
 void loop()
 {
   delay(1);
   startConfigurationPortalIfRequested();
-
-  // Check if a client has connected
-  while (!client.connected()) {
-    client = server.available();
-    if (client.connected()) {
-        clientTimeoutMillis = millis();
-    }
-    return;
-  }
-
-  readDataFromClient(client);
+  handleUDPServer();
 }
 
 void initializeServer() {
   mDNSSetup();
-  server.begin();
+  UDPServer.begin(UDP_SERVER_PORT);
 }
 
 void initializeWifi() {
@@ -371,20 +381,6 @@ void mDNSSetup() {
     Serial.println("Error setting up MDNS responder!");
   }
   Serial.println("mDNS responder started");
-  MDNS.addService("ledstrip", "tcp", SERVER_PORT); // Announce esp tcp service on port 8080
-}
-
-void readDataFromClient(WiFiClient client) {
-  if (client.available()) {
-    // Reset timeout if we receive data
-    clientTimeoutMillis = millis();
-  }
-  while (client.available()) {
-    Serial.write(client.read());
-  }
-  if (millis() - clientTimeoutMillis >= CLIENT_RECEIVE_TIMEOUT) {
-    // Client timed out... Disconnect client to let other clients connect
-    client.stop();
-  }
+  MDNS.addService("ledstrip", "tcp", UDP_SERVER_PORT); // Announce esp tcp service on port 8080
 }
 

@@ -25,9 +25,10 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.IOException;
-import java.io.OutputStream;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
 import java.net.InetAddress;
-import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -62,7 +63,7 @@ public class MainActivity extends AppCompatActivity implements View.OnTouchListe
 
     private InetAddress mHostAddress;
     private int mPort;
-    private Socket socket;
+    private DatagramSocket udpSocket;
     private boolean IsAsyncRunning;
     private Thread checkConnectionThread;
     private SendDataToDeviceTask sendDataToDeviceTask;
@@ -440,12 +441,32 @@ public class MainActivity extends AppCompatActivity implements View.OnTouchListe
         if (mIsConnected) return;
         try {
             // Checking connection
-            socket = new Socket(mHostAddress, mPort);
-            OutputStream out = socket.getOutputStream();
-            out.write(new byte[]{END_MARKER}); // Send endMarker to release server from waiting on readBytesUntil
-            out.flush();
-            out.close();
-            socket.close();
+            udpSocket = new DatagramSocket();
+            udpSocket.setSoTimeout(5000);
+            byte[] sendData = new byte[]{END_MARKER};
+            DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, mHostAddress, mPort);
+            udpSocket.send(sendPacket);
+            int retryCount = 0;
+            while(retryCount < 3) {
+                try {
+                    byte[] receiveData = new byte[1];
+                    DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
+                    udpSocket.receive(receivePacket);
+                    if (receiveData.length == 1 && receiveData[0] == END_MARKER) {
+                        break;
+                    }
+                } catch (SocketTimeoutException e) {
+                    retryCount++;
+                    udpSocket.send(sendPacket);
+                    continue;
+                }
+            }
+
+            if (retryCount == 3) {
+                handleCouldNotConnect();
+                return;
+            }
+
             if (Thread.interrupted()) return;
             mIsConnected = true;
             runOnUiThread(new Runnable() {
@@ -463,15 +484,29 @@ public class MainActivity extends AppCompatActivity implements View.OnTouchListe
             });
         } catch (IOException e) {
             if (Thread.interrupted()) return;
-            Log.d(TAG, getString(R.string.could_not_connect));
-            runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    initialText.setText(R.string.could_not_connect);
-                    initialText.setVisibility(View.VISIBLE);
-                }
-            });
+            handleCouldNotConnect();
         }
+//        catch (InterruptedException e) {
+//            e.printStackTrace();
+//        }
+//        finally {
+//            try {
+//                socket.close();
+//            } catch (IOException e) {
+//                e.printStackTrace();
+//            }
+//        }
+    }
+
+    private void handleCouldNotConnect() {
+        Log.d(TAG, getString(R.string.could_not_connect));
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                initialText.setText(R.string.could_not_connect);
+                initialText.setVisibility(View.VISIBLE);
+            }
+        });
     }
 
     private void reloadNewConnectionSettings() {
@@ -515,11 +550,14 @@ public class MainActivity extends AppCompatActivity implements View.OnTouchListe
         protected Void doInBackground(final SendDataToDeviceTaskArgs... args)
         {
             try {
-                socket = new Socket(mHostAddress, mPort);
-                OutputStream out = socket.getOutputStream();
-                out.write(args[0].dataToSend);
-                out.flush();
-                out.close();
+                udpSocket = new DatagramSocket();
+                DatagramPacket sendPacket = new DatagramPacket(args[0].dataToSend, args[0].dataToSend.length, mHostAddress, mPort);
+                udpSocket.send(sendPacket);
+//                OutputStream out = socket.getOutputStream();
+//                out.write(args[0].dataToSend);
+//                out.flush();
+//                Thread.sleep(50);
+//                out.close();
                 if (args[0].onSentMessage != null) {
                     runOnUiThread(new Runnable() {
                         @Override
@@ -532,7 +570,16 @@ public class MainActivity extends AppCompatActivity implements View.OnTouchListe
                 Log.d(TAG, "Could not send data to remote device.");
                 // Probably wifi turned off. Try get connection details from settings again
                 initializeConnectionSettings();
-            }
+            } // catch (InterruptedException e) {
+//                e.printStackTrace();
+//            }
+//            finally {
+//                try {
+//                    socket.close();
+//                } catch (IOException e) {
+//                    e.printStackTrace();
+//                }
+//            }
             return null;
         }
 
