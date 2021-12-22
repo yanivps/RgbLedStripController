@@ -46,9 +46,11 @@ bool initialConfig = false;
 #define MDNS_SERVICE_PROTOCOL "udp"
 
 // Wifi server definitions
+#define startMarker 254
 #define endMarker 255
 
 WiFiUDP UDPServer;
+int byteReceived;
 #define UDP_SERVER_PORT 4000
 
 void setup()
@@ -68,15 +70,25 @@ void setup()
 void handleUDPServer() {
   int packetSize = UDPServer.parsePacket();
   if (packetSize == 1) {
-    int recvByte = UDPServer.read();
-    Serial.write(recvByte);
-    if (recvByte == endMarker) {
+    byteReceived = UDPServer.read();
+    Serial.write(byteReceived);
+    if (byteReceived == endMarker) {
       // Send return packet
       UDPServer.beginPacket(UDPServer.remoteIP(), UDPServer.remotePort());
       UDPServer.write(endMarker);
       UDPServer.endPacket();
     }
   } else if (packetSize > 1) {
+    byteReceived = UDPServer.read();
+    if (byteReceived != startMarker) {
+      // Sender sent packet ID as first byte. Resend it as acknowledgement
+      UDPServer.beginPacket(UDPServer.remoteIP(), UDPServer.remotePort());
+      UDPServer.write(byteReceived);
+      UDPServer.endPacket();
+      byteReceived = UDPServer.read();
+    }
+    // send rest of data to the Serial port
+    Serial.write(byteReceived);
     while (UDPServer.available() > 0) {
       Serial.write(UDPServer.read());
     }
