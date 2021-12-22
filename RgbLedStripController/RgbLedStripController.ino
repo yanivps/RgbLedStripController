@@ -7,6 +7,7 @@
 #define TIMER_ON_COMMAND 0x02
 #define TIMER_OFF_COMMAND 0x03
 #define ANIMATION_COMMAND 0x04
+#define SET_COLOR_WITH_FADE_COMMAND 0x05
 #define FADE_ANIMATION 0x01
 #define BLINK_ANIMATION 0x02
 
@@ -28,13 +29,15 @@ unsigned long timerOn = 0;
 // Animations definitions
 unsigned long animationStartTime = 0;
 unsigned long animationPeriod = 0;
+unsigned long singleFadePeriod = 0;
 byte animationType;
 boolean randomAnimationColors;
 boolean isFadeInitialized;
 boolean fadeIn;
-float redPinFadeValue, redFadeDiff;
-float greenPinFadeValue, greenFadeDiff;
-float bluePinFadeValue, blueFadeDiff;
+boolean singleFadeRequested;
+float redPinFadeValue, redFadeInDiff, redFadeOutDiff;
+float greenPinFadeValue, greenFadeInDiff, greenFadeOutDiff;
+float bluePinFadeValue, blueFadeInDiff, blueFadeOutDiff;
 #define FADE_STEP_MILLIS_INTERVAL 10
 
 #define BUTTON_PRESSED LOW
@@ -50,9 +53,9 @@ const int max_red = 255;
 const int max_green = 255;
 const int max_blue = 100;
 
-byte currentRedPinValue = 0, lastRedPinValue = 255, redPinBeforeAnimation = 255;
-byte currentGreenPinValue = 0, lastGreenPinValue = 255, greenPinBeforeAnimation = 255;
-byte currentBluePinValue = 0, lastBluePinValue = 255, bluePinBeforeAnimation = 255;
+byte currentRedPinValue = 0, lastRedPinValue = 255, redPinBeforeAnimation = 255, singleFadeRedPinValue = 0;
+byte currentGreenPinValue = 0, lastGreenPinValue = 255, greenPinBeforeAnimation = 255, singleFadeGreenPinValue = 0;
+byte currentBluePinValue = 0, lastBluePinValue = 255, bluePinBeforeAnimation = 255, singleFadeBluePinValue = 0;
 
 byte colors[3] = {0, 0, 0}; // array to store led brightness values
 byte timerOnColors[3] = {0, 0, 0}; // array to store led brightness values of future timer
@@ -180,6 +183,9 @@ void processData() {
       case SET_COLOR_COMMAND:
         setColorCommand();
         break;
+      case SET_COLOR_WITH_FADE_COMMAND:
+        setColorWithFadeCommand();
+        break;
       case TIMER_ON_COMMAND:
         timerOnCommand();
         break;
@@ -202,6 +208,31 @@ void setColorCommand() {
 
   //set the three PWM pins according to the data read from the Serial port
   analogWriteColors(colors[0], colors[1], colors[2]);
+}
+
+void setColorWithFadeCommand() {
+  if (dataRecvCount != 5) return; // Invalid command data
+
+  for (int i = 0; i < 3; i++) {
+      colors[i] = commandDataPtr[i];
+  }
+
+  // When there is an active animation, change color as if it were a setColorCommand
+  if (animationType != NULL) {
+    analogWriteColors(colors[0], colors[1], colors[2]);
+    return;
+  }
+
+  singleFadeRequested = true;
+  singleFadePeriod = bytesToWord(commandDataPtr + 3);
+
+  singleFadeRedPinValue = colors[0];
+  singleFadeGreenPinValue = colors[1];
+  singleFadeBluePinValue = colors[2];
+
+  animationType = FADE_ANIMATION;
+  animationStartTime = currentTime;
+  isFadeInitialized = false;
 }
 
 void timerOnCommand() {
@@ -245,6 +276,7 @@ void animationCommand() {
   randomAnimationColors = commandDataPtr[3];
   animationStartTime = currentTime;
   isFadeInitialized = false;
+  singleFadeRequested = false;
 }
 
 void animate() {
@@ -263,9 +295,37 @@ void fade() {
     redPinFadeValue = currentRedPinValue;
     greenPinFadeValue = currentGreenPinValue;
     bluePinFadeValue = currentBluePinValue;
-    redFadeDiff = (currentRedPinValue) / (float) animationPeriod * FADE_STEP_MILLIS_INTERVAL;
-    greenFadeDiff = (currentGreenPinValue) / (float) animationPeriod * FADE_STEP_MILLIS_INTERVAL;
-    blueFadeDiff = (currentBluePinValue) / (float) animationPeriod * FADE_STEP_MILLIS_INTERVAL;
+
+    if (singleFadeRequested) {
+      // Calculate fade in to the destination we want to reach with the color of the single fade
+      redFadeInDiff = (singleFadeRedPinValue) / (float) singleFadePeriod * FADE_STEP_MILLIS_INTERVAL;
+      greenFadeInDiff = (singleFadeGreenPinValue) / (float) singleFadePeriod * FADE_STEP_MILLIS_INTERVAL;
+      blueFadeInDiff = (singleFadeBluePinValue) / (float) singleFadePeriod * FADE_STEP_MILLIS_INTERVAL;
+      // Calculate fade out based on the current color that we want to slowly turn off
+      redFadeOutDiff = (currentRedPinValue) / (float) singleFadePeriod * FADE_STEP_MILLIS_INTERVAL;
+      greenFadeOutDiff = (currentGreenPinValue) / (float) singleFadePeriod * FADE_STEP_MILLIS_INTERVAL;
+      blueFadeOutDiff = (currentBluePinValue) / (float) singleFadePeriod * FADE_STEP_MILLIS_INTERVAL;
+
+      if (redPinFadeValue == 0 && greenPinFadeValue == 0 && bluePinFadeValue == 0) {
+        // If starting single fade when turned off:
+        fadeIn = true;
+      } else {
+        // If starting single fade when already turned on (with some color):
+        fadeIn = false;
+      }
+      // Set the destination we want to reach with the color of the single fade
+      currentRedPinValue = singleFadeRedPinValue;
+      currentGreenPinValue = singleFadeGreenPinValue;
+      currentBluePinValue = singleFadeBluePinValue;
+    } else {
+      redFadeInDiff = (currentRedPinValue) / (float) animationPeriod * FADE_STEP_MILLIS_INTERVAL;
+      greenFadeInDiff = (currentGreenPinValue) / (float) animationPeriod * FADE_STEP_MILLIS_INTERVAL;
+      blueFadeInDiff = (currentBluePinValue) / (float) animationPeriod * FADE_STEP_MILLIS_INTERVAL;
+      // Same diff for fade in and fade out when animating same color (not running single animation)
+      redFadeOutDiff = redFadeInDiff;
+      greenFadeOutDiff = greenFadeInDiff;
+      blueFadeOutDiff = blueFadeInDiff;
+    }
     isFadeInitialized = true;
   }
 
@@ -278,26 +338,33 @@ void fade() {
           currentGreenPinValue = random(0, max_green);
           currentBluePinValue = random(0, max_blue);
         } while (currentRedPinValue == 0 && currentGreenPinValue == 0 && currentBluePinValue == 0);
-        redFadeDiff = (currentRedPinValue) / (float) animationPeriod * FADE_STEP_MILLIS_INTERVAL;
-        greenFadeDiff = (currentGreenPinValue) / (float) animationPeriod * FADE_STEP_MILLIS_INTERVAL;
-        blueFadeDiff = (currentBluePinValue) / (float) animationPeriod * FADE_STEP_MILLIS_INTERVAL;
+        redFadeInDiff = (currentRedPinValue) / (float) animationPeriod * FADE_STEP_MILLIS_INTERVAL;
+        greenFadeInDiff = (currentGreenPinValue) / (float) animationPeriod * FADE_STEP_MILLIS_INTERVAL;
+        blueFadeInDiff = (currentBluePinValue) / (float) animationPeriod * FADE_STEP_MILLIS_INTERVAL;
+        redFadeOutDiff = redFadeInDiff;
+        greenFadeOutDiff = greenFadeInDiff;
+        blueFadeOutDiff = blueFadeInDiff;
       }
     }
     if (redPinFadeValue == currentRedPinValue && greenPinFadeValue == currentGreenPinValue && bluePinFadeValue == currentBluePinValue) {
       fadeIn = false;
+      if (singleFadeRequested) {
+        animationType = NULL;
+        return;
+      }
     }
 
-    redPinFadeValue = fadeIn ? redPinFadeValue + redFadeDiff : redPinFadeValue - redFadeDiff;
-    if (redPinFadeValue > currentRedPinValue) redPinFadeValue = currentRedPinValue;
-    if (redPinFadeValue < 0) redPinFadeValue = 0;
+    redPinFadeValue = fadeIn ? redPinFadeValue + redFadeInDiff : redPinFadeValue - redFadeOutDiff;
+    if (fadeIn && redPinFadeValue > currentRedPinValue) redPinFadeValue = currentRedPinValue;
+    if (!fadeIn && redPinFadeValue < 0) redPinFadeValue = 0;
 
-    greenPinFadeValue = fadeIn ? greenPinFadeValue + greenFadeDiff : greenPinFadeValue - greenFadeDiff;
-    if (greenPinFadeValue > currentGreenPinValue) greenPinFadeValue = currentGreenPinValue;
-    if (greenPinFadeValue < 0) greenPinFadeValue = 0;
+    greenPinFadeValue = fadeIn ? greenPinFadeValue + greenFadeInDiff : greenPinFadeValue - greenFadeOutDiff;
+    if (fadeIn && greenPinFadeValue > currentGreenPinValue) greenPinFadeValue = currentGreenPinValue;
+    if (!fadeIn && greenPinFadeValue < 0) greenPinFadeValue = 0;
 
-    bluePinFadeValue = fadeIn ? bluePinFadeValue + blueFadeDiff : bluePinFadeValue - blueFadeDiff;
-    if (bluePinFadeValue > currentBluePinValue) bluePinFadeValue = currentBluePinValue;
-    if (bluePinFadeValue < 0) bluePinFadeValue = 0;
+    bluePinFadeValue = fadeIn ? bluePinFadeValue + blueFadeInDiff : bluePinFadeValue - blueFadeOutDiff;
+    if (fadeIn && bluePinFadeValue > currentBluePinValue) bluePinFadeValue = currentBluePinValue;
+    if (!fadeIn && bluePinFadeValue < 0) bluePinFadeValue = 0;
 
     analogWrite(rgbRedPin, redPinFadeValue);
     analogWrite(rgbGreenPin, greenPinFadeValue);
@@ -403,4 +470,3 @@ word bytesToWord(byte* bytes) {
   value = (value << 8) + bytes[0];
   return value;
 }
-
